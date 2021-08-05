@@ -16,6 +16,7 @@ import com.stripe.stripeterminal.callable.ConnectionTokenCallback;
 import com.stripe.stripeterminal.callable.ConnectionTokenProvider;
 import com.stripe.stripeterminal.callable.DiscoveryListener;
 import com.stripe.stripeterminal.callable.PaymentIntentCallback;
+import com.stripe.stripeterminal.callable.PaymentMethodCallback;
 import com.stripe.stripeterminal.callable.ReaderCallback;
 import com.stripe.stripeterminal.callable.ReaderDisplayListener;
 import com.stripe.stripeterminal.callable.ReaderSoftwareUpdateCallback;
@@ -28,6 +29,7 @@ import com.stripe.stripeterminal.model.external.DeviceType;
 import com.stripe.stripeterminal.model.external.DiscoveryConfiguration;
 import com.stripe.stripeterminal.model.external.PaymentIntent;
 import com.stripe.stripeterminal.model.external.PaymentIntentParameters;
+import com.stripe.stripeterminal.model.external.PaymentMethod;
 import com.stripe.stripeterminal.model.external.PaymentStatus;
 import com.stripe.stripeterminal.model.external.Reader;
 import com.stripe.stripeterminal.model.external.ReaderDisplayMessage;
@@ -35,6 +37,7 @@ import com.stripe.stripeterminal.model.external.ReaderEvent;
 import com.stripe.stripeterminal.model.external.ReaderInputOptions;
 import com.stripe.stripeterminal.model.external.ReaderSoftwareUpdate;
 import com.stripe.stripeterminal.model.external.TerminalException;
+import com.stripe.stripeterminal.model.external.ReadReusableCardParameters;
 import com.stripe.stripeterminal.Terminal;
 
 import java.sql.Wrapper;
@@ -61,6 +64,7 @@ public class RNStripeTerminalModule extends ReactContextBaseJavaModule implement
     List<? extends Reader> discoveredReadersList = null;
     ReaderSoftwareUpdate readerSoftwareUpdate;
     Cancelable pendingInstallUpdate = null;
+    Cancelable pendingReadPaymentMethod = null;
 
     public RNStripeTerminalModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -155,12 +159,26 @@ public class RNStripeTerminalModule extends ReactContextBaseJavaModule implement
         return paymentIntentMap;
     }
 
+    WritableMap serializePaymentMethod(PaymentMethod paymentMethod){
+        WritableMap paymentMethodMap = Arguments.createMap();
+        paymentMethodMap.putString(STRIPE_ID, paymentMethod.getId());
+        paymentMethodMap.putString(LAST4, paymentMethod.getCardDetails().getLast4());
+        paymentMethodMap.putString(FUNDING, paymentMethod.getCardDetails().getFunding());
+        paymentMethodMap.putInt(EXP_MONTH, paymentMethod.getCardDetails().getExpMonth());
+        paymentMethodMap.putInt(EXP_YEAR, paymentMethod.getCardDetails().getExpYear());
+        paymentMethodMap.putString(BRAND, paymentMethod.getCardDetails().getBrand());
+        return paymentMethodMap;
+    }
+
     @ReactMethod
     public void discoverReaders(int deviceType, int method, int simulated) {
+        if (!Terminal.isInitialized()) {
+            return;
+        }
         boolean isSimulated = simulated == 0?false:true;
         try {
             DeviceType devType = DeviceType.values()[deviceType];
-            DiscoveryConfiguration discoveryConfiguration = new DiscoveryConfiguration(0, devType, isSimulated);
+            DiscoveryConfiguration discoveryConfiguration = new DiscoveryConfiguration();
             Callback statusCallback = new Callback() {
 
                 @Override
@@ -195,7 +213,7 @@ public class RNStripeTerminalModule extends ReactContextBaseJavaModule implement
 
     @ReactMethod
     public void initialize(com.facebook.react.bridge.Callback callback) {
-        try {
+        /*try {
             //Check if stripe is initialized
             Terminal.getInstance();
 
@@ -203,7 +221,7 @@ public class RNStripeTerminalModule extends ReactContextBaseJavaModule implement
             writableMap.putBoolean("isInitialized", true);
             callback.invoke(writableMap);
             return;
-        }catch (IllegalStateException e){ }
+        }catch (IllegalStateException e){ }*/
 
         pendingConnectionTokenCallback = null;
         abortDiscoverReaders();
@@ -216,7 +234,9 @@ public class RNStripeTerminalModule extends ReactContextBaseJavaModule implement
         String err = "";
         boolean isInit =false;
         try {
-            Terminal.initTerminal(getContext().getApplicationContext(), logLevel, tokenProvider, terminalListener);
+            if (!Terminal.isInitialized()) {
+                Terminal.initTerminal(getCurrentActivity(), logLevel, tokenProvider, terminalListener);
+            }
             lastReaderEvent = ReaderEvent.CARD_REMOVED;
             isInit = true;
         } catch (TerminalException e) {
@@ -350,7 +370,7 @@ public class RNStripeTerminalModule extends ReactContextBaseJavaModule implement
             }
 
             if (options.hasKey(TRANSFER_GROUP)) {
-                paymentIntentParamBuilder.setTransferGroup(TRANSFER_GROUP);
+                paymentIntentParamBuilder.setTransferGroup(options.getString(TRANSFER_GROUP));
             }
 
             if (options.hasKey(CUSTOMER)) {
@@ -374,10 +394,10 @@ public class RNStripeTerminalModule extends ReactContextBaseJavaModule implement
                 HashMap<String, String> metaDataMap = new HashMap<>();
 
                 if (map != null) {
-                    ReadableMapKeySetIterator iterator = options.keySetIterator();
+                    ReadableMapKeySetIterator iterator = map.keySetIterator();
                     while (iterator.hasNextKey()) {
                         String key = iterator.nextKey();
-                        String val = options.getString(key);
+                        String val = map.getString(key);
                         metaDataMap.put(key, val);
                     }
                 }
@@ -387,6 +407,28 @@ public class RNStripeTerminalModule extends ReactContextBaseJavaModule implement
         }
 
         return paymentIntentParamBuilder;
+    }
+
+    @ReactMethod
+    public void readReusableCard() {
+        ReadReusableCardParameters.Builder readReusableCardParameters = new ReadReusableCardParameters.Builder();
+        pendingReadPaymentMethod = Terminal.getInstance().readReusableCard(readReusableCardParameters.build(), this, new PaymentMethodCallback() {
+            @Override
+            public void onSuccess(@Nonnull PaymentMethod paymentMethod) {
+                pendingReadPaymentMethod = null;
+                WritableMap paymentMethodeRespMap = Arguments.createMap();
+                paymentMethodeRespMap.putMap(METHOD, serializePaymentMethod(paymentMethod));
+                sendEventWithName(EVENT_READ_RESUSABLE_CARD, paymentMethodeRespMap);
+            }
+
+            @Override
+            public void onFailure(@Nonnull TerminalException e) {
+                pendingReadPaymentMethod = null;
+                WritableMap paymentMethodeRespMap = Arguments.createMap();
+                paymentMethodeRespMap.putString(ERROR,e.getErrorMessage());
+                sendEventWithName(EVENT_READ_RESUSABLE_CARD, paymentMethodeRespMap);
+            }
+        });
     }
 
     @ReactMethod
@@ -580,6 +622,9 @@ public class RNStripeTerminalModule extends ReactContextBaseJavaModule implement
 
     @ReactMethod
     public void abortDiscoverReaders(){
+        if (!Terminal.isInitialized()) {
+            return;
+        }
         if(pendingDiscoverReaders!=null && !pendingDiscoverReaders.isCompleted()){
             pendingDiscoverReaders.cancel(new Callback() {
                 @Override
@@ -648,6 +693,29 @@ public class RNStripeTerminalModule extends ReactContextBaseJavaModule implement
             sendEventWithName(EVENT_ABORT_INSTALL_COMPLETION,Arguments.createMap());
         }
     }
+
+    @ReactMethod
+    public void abortReadPaymentMethod(){
+        if(pendingReadPaymentMethod !=null && !pendingReadPaymentMethod.isCompleted()){
+            pendingReadPaymentMethod.cancel(new Callback() {
+                @Override
+                public void onSuccess() {
+                    pendingReadPaymentMethod = null;
+                    sendEventWithName(EVENT_ABORT_READ_PAYMENT_METHOD,Arguments.createMap());
+                }
+
+                @Override
+                public void onFailure(@Nonnull TerminalException e) {
+                    WritableMap errorMap = Arguments.createMap();
+                    errorMap.putString(ERROR,e.getErrorMessage());
+                    sendEventWithName(EVENT_ABORT_READ_PAYMENT_METHOD,errorMap);
+                }
+            });
+        }else{
+            sendEventWithName(EVENT_ABORT_READ_PAYMENT_METHOD,Arguments.createMap());
+        }
+    }
+
 
     @ReactMethod
     public void installUpdate(){
@@ -770,3 +838,4 @@ public class RNStripeTerminalModule extends ReactContextBaseJavaModule implement
         sendEventWithName(EVENT_READER_SOFTWARE_UPDATE_PROGRESS,new Float(v));
     }
 }
+

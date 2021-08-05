@@ -1,5 +1,5 @@
 import EventEmitter from "eventemitter3";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AsyncStorage } from "react-native";
 
 export default function createConnectionService(StripeTerminal, options) {
   class STCS {
@@ -28,7 +28,7 @@ export default function createConnectionService(StripeTerminal, options) {
       this.policy = policy;
       this.deviceType = deviceType || StripeTerminal.DeviceTypeChipper2X;
       this.discoveryMode =
-        discoveryMode || StripeTerminal.DiscoveryMethodBluetoothProximity;
+        Platform.OS == "android" ? StripeTerminal.DiscoveryMethodBluetoothScan : StripeTerminal.DiscoveryMethodBluetoothProximity;
 
       if (STCS.Policies.indexOf(policy) === -1) {
         throw new Error(
@@ -40,6 +40,9 @@ export default function createConnectionService(StripeTerminal, options) {
 
       this.emitter = new EventEmitter();
       this.desiredReader = null;
+
+      this.onReadersDiscovered = this.onReadersDiscovered.bind(this);
+      this.onUnexpectedDisconnect = this.onUnexpectedDisconnect.bind(this);
 
       StripeTerminal.addReadersDiscoveredListener(this.onReadersDiscovered);
       StripeTerminal.addDidReportUnexpectedReaderDisconnectListener(
@@ -140,15 +143,17 @@ export default function createConnectionService(StripeTerminal, options) {
       await StripeTerminal.disconnectReader(); // cancel any existing non-matching reader
       return StripeTerminal.discoverReaders(
         this.deviceType,
-        this.discoveryMode
+        this.discoveryMode,
+        0
       );
     }
 
     async discover() {
-      await StripeTerminal.abortDiscoverReaders(); // end any pending search
+      //await StripeTerminal.abortDiscoverReaders(); // end any pending search
       return StripeTerminal.discoverReaders(
         this.deviceType,
-        this.discoveryMode
+        this.discoveryMode,
+        0
       );
     }
 
@@ -171,7 +176,13 @@ export default function createConnectionService(StripeTerminal, options) {
     }
 
     addListener(event, handler) {
-      return this.emitter.addListener(event, handler);
+      const emitter = this.emitter;
+      emitter.addListener(event, handler)
+      return {
+        remove: () => {
+          emitter.removeListener(event, handler);
+        }
+      };
     }
 
     async getPersistedReaderSerialNumber() {

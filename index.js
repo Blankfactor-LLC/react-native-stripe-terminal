@@ -47,7 +47,7 @@ class StripeTerminal {
   constructor() {
     this.listener = new NativeEventEmitter(RNStripeTerminal);
 
-    this.listener.addListener('requestConnectionToken', () => {
+    this.listener.addListener('requestConnectionToken', function(){
       this._fetchConnectionToken()
         .then(token => {
           if (token) {
@@ -57,19 +57,22 @@ class StripeTerminal {
           }
         })
         .catch(err => RNStripeTerminal.setConnectionToken(null, err.message || 'Error in user-supplied `fetchConnectionToken`.'));
-    });
+    }.bind(this));
 
     this._createListeners([
       'log',
       'readersDiscovered',
       'readerSoftwareUpdateProgress',
       'didRequestReaderInput',
+      'didRequestReaderInputPrompt',
       'didRequestReaderDisplayMessage',
       'didReportReaderEvent',
       'didReportLowBatteryWarning',
       'didChangePaymentStatus',
       'didChangeConnectionStatus',
       'didReportUnexpectedReaderDisconnect',
+      'didBeginWaitingForReaderInput',
+      'didBeginWaitingForReaderPrompt'
     ]);
   }
 
@@ -98,7 +101,7 @@ class StripeTerminal {
   }
 
   initialize({ fetchConnectionToken }) {
-    this._fetchConnectionToken = fetchConnectionToken;
+    this._fetchConnectionToken = fetchConnectionToken.bind(this);
     return new Promise((resolve, reject)=>{
     if(Platform.OS == "android"){
       RNStripeTerminal.initialize((status)=>{
@@ -124,7 +127,7 @@ class StripeTerminal {
   checkForUpdate() {
     return this._wrapPromiseReturn('updateCheck', () => {
       RNStripeTerminal.checkForUpdate();
-    }, 'update')
+    })
   }
 
   installUpdate() {
@@ -229,6 +232,13 @@ class StripeTerminal {
     );
   }
 
+  readReusableCard() {
+    return this._wrapPromiseReturn('readReusableCard', () => {
+      RNStripeTerminal.readReusableCard();
+    },
+    'method')
+  }
+
   abortCreatePayment() {
     return this._wrapPromiseReturn('abortCreatePaymentCompletion', () => {
       RNStripeTerminal.abortCreatePayment();
@@ -247,15 +257,19 @@ class StripeTerminal {
     })
   }
 
+  abortReadPaymentMethod() {
+    return this._wrapPromiseReturn('abortReadPaymentMethod', () => {
+      RNStripeTerminal.abortReadPaymentMethod();
+    })
+  }
+
   startService(options) {
     if (typeof options === 'string') {
       options = { policy: options };
     }
 
     if (this._currentService) {
-      return Promise.reject(
-        'A service is already running. You must stop it using `stopService` before starting a new service.',
-      );
+      return this._currentService;
     }
 
     this._currentService = createConnectionService(this, options);
@@ -280,5 +294,6 @@ export default StripeTerminal_;
 export const {
   useStripeTerminalState,
   useStripeTerminalCreatePayment,
+  useStripeTerminalReadPaymentMethod,
   useStripeTerminalConnectionManager,
 } = createHooks(StripeTerminal_);
