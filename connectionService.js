@@ -24,11 +24,10 @@ export default function createConnectionService(StripeTerminal, options) {
 
     static DesiredReaderAny = "any";
 
-    constructor({ policy, deviceType, discoveryMode }) {
+    constructor({ policy, discoveryMode }) {
       this.policy = policy;
-      this.deviceType = deviceType || StripeTerminal.DeviceTypeChipper2X;
       this.discoveryMode =
-        Platform.OS == "android" ? StripeTerminal.DiscoveryMethodBluetoothScan : StripeTerminal.DiscoveryMethodBluetoothProximity;
+        discoveryMode || StripeTerminal.DiscoveryMethodBluetoothProximity;
 
       if (STCS.Policies.indexOf(policy) === -1) {
         throw new Error(
@@ -40,9 +39,6 @@ export default function createConnectionService(StripeTerminal, options) {
 
       this.emitter = new EventEmitter();
       this.desiredReader = null;
-
-      this.onReadersDiscovered = this.onReadersDiscovered.bind(this);
-      this.onUnexpectedDisconnect = this.onUnexpectedDisconnect.bind(this);
 
       StripeTerminal.addReadersDiscoveredListener(this.onReadersDiscovered);
       StripeTerminal.addDidReportUnexpectedReaderDisconnectListener(
@@ -141,19 +137,15 @@ export default function createConnectionService(StripeTerminal, options) {
 
       await StripeTerminal.abortDiscoverReaders(); // end any pending search
       await StripeTerminal.disconnectReader(); // cancel any existing non-matching reader
-      return StripeTerminal.discoverReaders(
-        this.deviceType,
-        this.discoveryMode,
-        0
+      return StripeTerminal.discoverReadersByMethod(
+        this.discoveryMode
       );
     }
 
     async discover() {
-      //await StripeTerminal.abortDiscoverReaders(); // end any pending search
-      return StripeTerminal.discoverReaders(
-        this.deviceType,
-        this.discoveryMode,
-        0
+      await StripeTerminal.abortDiscoverReaders(); // end any pending search
+      return StripeTerminal.discoverReadersByMethod(
+        this.discoveryMode
       );
     }
 
@@ -176,13 +168,7 @@ export default function createConnectionService(StripeTerminal, options) {
     }
 
     addListener(event, handler) {
-      const emitter = this.emitter;
-      emitter.addListener(event, handler)
-      return {
-        remove: () => {
-          emitter.removeListener(event, handler);
-        }
-      };
+      return this.emitter.addListener(event, handler);
     }
 
     async getPersistedReaderSerialNumber() {
