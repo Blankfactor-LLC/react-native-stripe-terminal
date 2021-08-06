@@ -170,14 +170,6 @@ export default function createHooks(StripeTerminal) {
         setManagerConnectionStatus(ConnectionManagerStatusScanning);
         service.discover();
       },
-      discoverReadersByMethod: () => {
-        setManagerConnectionStatus(ConnectionManagerStatusScanning);
-        service.discover();
-      },
-      dis: () => {
-        setManagerConnectionStatus(ConnectionManagerStatusScanning);
-        service.discover();
-      },
       disconnectReader: () => {
         service.disconnect();
       }
