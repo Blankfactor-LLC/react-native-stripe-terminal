@@ -1,0 +1,36 @@
+{
+  "name": "rn-stripe-terminal",
+  "title": "React Native Stripe Terminal",
+  "version": "1.0.3",
+  "description": "React Native Stripe Terminal",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Goodfynd/rn-stripe-terminal.git",
+    "baseUrl": "https://github.com/Goodfynd/rn-stripe-terminal"
+  },
+  "keywords": [
+    "react-native"
+  ],
+  "author": {
+    "name": "Goodfynd, Inc.",
+    "email": "lemaire@goodfynd.com"
+  },
+  "forkedAuthor": {
+    "name": "Theo Patt",
+    "email": "theo@theopatt.com"
+  },
+  "license": "MIT",
+  "licenseFilename": "LICENSE",
+  "readmeFilename": "README.md",
+  "peerDependencies": {
+    "react": "^16.2.0",
+    "react-native": "^0.52.0"
+  },
+  "dependencies": {
+    "cancelable-promise": "^4.0.0"
+  }
+}

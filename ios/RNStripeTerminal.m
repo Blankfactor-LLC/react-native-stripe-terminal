@@ -53,7 +53,9 @@ static dispatch_once_t onceToken = 0;
              @"lastReaderEvent",
              @"abortCreatePaymentCompletion",
              @"abortDiscoverReadersCompletion",
-             @"abortInstallUpdateCompletion"
+             @"abortInstallUpdateCompletion",
+             @"abortReadPaymentMethod",
+             @"readReusableCard"
              ];
 }
 
@@ -228,6 +230,17 @@ RCT_EXPORT_METHOD(installUpdate) {
              };
 }
 
+- (NSDictionary *)serializePaymentMethod:(SCPPaymentMethod *)method {
+    return @{
+             @"stripeId": method.stripeId,
+             @"last4": method.card.last4,
+             @"expYear": @(method.card.expYear),
+             @"expMonth": @(method.card.expMonth),
+             @"brand": @(method.card.brand),
+             @"funding": @(method.card.funding)
+             };
+}
+
 RCT_EXPORT_METHOD(createPayment:(NSDictionary *)options) {
     void (^onIntent) (SCPPaymentIntent * _Nullable intent, NSError * _Nullable error) = ^(SCPPaymentIntent * _Nullable intent, NSError * _Nullable creationError) {
         if (creationError) {
@@ -293,7 +306,7 @@ RCT_EXPORT_METHOD(createPaymentIntent:(NSDictionary *)options) {
     SCPPaymentIntentParameters *params = [[SCPPaymentIntentParameters alloc] initWithAmount:amount currency:currency];
 
     NSInteger applicationFeeAmount = [RCTConvert NSInteger:options[@"applicationFeeAmount"]];
-
+    
     if (applicationFeeAmount) {
         params.applicationFeeAmount = [NSNumber numberWithInteger:applicationFeeAmount];
         params.onBehalfOf = options[@"onBehalfOf"];
@@ -365,6 +378,21 @@ RCT_EXPORT_METHOD(cancelPaymentIntent) {
 
         } else {
             [self sendEventWithName:@"paymentIntentCancel" body:@{@"intent": [self serializePaymentIntent:canceledIntent]}];
+        }
+    }];
+}
+
+RCT_EXPORT_METHOD(readReusableCard) {
+    SCPReadReusableCardParameters *params = [SCPReadReusableCardParameters new];
+    pendingReadPaymentMethod = [[SCPTerminal shared] readReusableCard:params delegate:self completion:^(SCPPaymentMethod *readResult, NSError *error) {
+        pendingReadPaymentMethod = nil;
+        if (error) {
+            [self sendEventWithName:@"readReusableCard" body:@{
+                                                                    @"error": [error localizedDescription],
+                                                                    @"code": @(error.code)
+                                                                    }];
+        } else {
+            [self sendEventWithName:@"readReusableCard" body:@{@"method": [self serializePaymentMethod:readResult]}];
         }
     }];
 }
@@ -456,6 +484,22 @@ RCT_EXPORT_METHOD(abortCreatePayment) {
     [self sendEventWithName:@"abortCreatePaymentCompletion" body:@{}];
 }
 
+RCT_EXPORT_METHOD(abortReadPaymentMethod) {
+    if (pendingReadPaymentMethod) {
+        [pendingReadPaymentMethod cancel:^(NSError * _Nullable error) {
+            if (error) {
+                [self sendEventWithName:@"abortReadPaymentMethod" body:@{@"error": [error localizedDescription]}];
+            } else {
+                pendingReadPaymentMethod = nil;
+                [self sendEventWithName:@"abortReadPaymentMethod" body:@{}];
+            }
+        }];
+        return;
+    }
+
+    [self sendEventWithName:@"abortReadPaymentMethod" body:@{}];
+}
+
 RCT_EXPORT_METHOD(abortDiscoverReaders) {
     if (pendingDiscoverReaders) {
         [pendingDiscoverReaders cancel:^(NSError * _Nullable error) {
@@ -504,3 +548,5 @@ RCT_EXPORT_METHOD(getLastReaderEvent) {
 RCT_EXPORT_MODULE()
 
 @end
+
+
