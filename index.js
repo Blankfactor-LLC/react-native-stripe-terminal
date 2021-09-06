@@ -286,6 +286,14 @@ class StripeTerminal {
       this._currentService = null;
     });
   }
+
+  cleanReadersDiscoveredListener() {
+    if (!this._currentService) {
+      return Promise.resolve();
+    }
+
+    return this._currentService.cleanReadersDiscoveredListener();
+  }
 }
 
 const StripeTerminal_ = new StripeTerminal();
