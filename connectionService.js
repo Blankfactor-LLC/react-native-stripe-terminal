@@ -223,6 +223,10 @@ export default function createConnectionService(StripeTerminal, options) {
         this.onUnexpectedDisconnect
       );
     }
+
+    async cleanReadersDiscoveredListener() {
+      StripeTerminal.removeReadersDiscoveredListener(this.onReadersDiscovered);
+    }
   }
 
   const StripeTerminalConnectionService = STCS;
