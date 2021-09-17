@@ -118,6 +118,10 @@ class StripeTerminal {
   });
   }
 
+   reinitialize() {
+    RNStripeTerminal.clearCachedCredentials();
+  }
+
   discoverReaders(deviceType, method, simulated) {
     return this._wrapPromiseReturn('readerDiscoveryCompletion', () => {
       RNStripeTerminal.discoverReaders(deviceType, method, simulated);
